@@ -10,8 +10,13 @@ from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
 from rest_framework.validators import UniqueValidator
 
+from django.core.exceptions import MultipleObjectsReturned
+
 
 class BaseNestedModelSerializer(serializers.ModelSerializer):
+    def get_model(self):
+        return self.Meta.model
+
     def _extract_relations(self, validated_data):
         reverse_relations = OrderedDict()
         relations = OrderedDict()
@@ -254,6 +259,30 @@ class NestedCreateMixin(BaseNestedModelSerializer):
 
         # Create instance
         instance = super(NestedCreateMixin, self).create(validated_data)
+
+        self.update_or_create_reverse_relations(instance, reverse_relations)
+
+        return instance
+
+
+class NestedGetOrCreateMixin(BaseNestedModelSerializer):
+    """
+    Adds nested get_or_create feature
+    """
+    def create(self, validated_data):
+        relations, reverse_relations = self._extract_relations(validated_data)
+
+        # Create or update direct relations (foreign key, one-to-one)
+        self.update_or_create_direct_relations(
+            validated_data,
+            relations,
+        )
+
+        # get_or_create instance
+        try:
+            instance = super(NestedGetOrCreateMixin, self).get_model().objects.get_or_create(**validated_data)[0]
+        except MultipleObjectsReturned:
+            instance = super(NestedGetOrCreateMixin, self).get_model().objects.get(**validated_data)
 
         self.update_or_create_reverse_relations(instance, reverse_relations)
 
