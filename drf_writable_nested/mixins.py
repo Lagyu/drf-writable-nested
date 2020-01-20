@@ -6,7 +6,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.db.models import ProtectedError, FieldDoesNotExist
 from django.db.models.fields.related import ForeignObjectRel
 from django.utils.translation import ugettext_lazy as _
-from rest_framework import serializers
+from rest_framework import serializers, validators
 from rest_framework.exceptions import ValidationError
 from rest_framework.validators import UniqueValidator
 
@@ -269,6 +269,16 @@ class NestedGetOrCreateMixin(BaseNestedModelSerializer):
     """
     Adds nested get_or_create feature
     """
+    def run_validators(self, value):
+        for validator in self.validators:
+            if isinstance(validator, validators.UniqueTogetherValidator):
+                self.validators.remove(validator)
+
+            if isinstance(validator, validators.UniqueValidator):
+                self.validators.remove(validator)
+
+        super(NestedGetOrCreateMixin, self).run_validators(value)
+
     def create(self, validated_data):
         relations, reverse_relations = self._extract_relations(validated_data)
 
