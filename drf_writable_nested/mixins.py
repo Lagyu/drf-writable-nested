@@ -10,7 +10,11 @@ from rest_framework import serializers, validators
 from rest_framework.exceptions import ValidationError
 from rest_framework.validators import UniqueValidator
 
+from rest_framework.settings import api_settings
+
 from django.core.exceptions import MultipleObjectsReturned
+
+from collections.abc import Mapping
 
 
 class BaseNestedModelSerializer(serializers.ModelSerializer):
@@ -274,9 +278,6 @@ class NestedGetOrCreateMixin(BaseNestedModelSerializer):
             if isinstance(validator, validators.UniqueTogetherValidator):
                 self.validators.remove(validator)
 
-            if isinstance(validator, validators.UniqueValidator):
-                self.validators.remove(validator)
-
         super(NestedGetOrCreateMixin, self).run_validators(value)
 
     def create(self, validated_data):
@@ -297,6 +298,29 @@ class NestedGetOrCreateMixin(BaseNestedModelSerializer):
         self.update_or_create_reverse_relations(instance, reverse_relations)
 
         return instance
+
+    def to_internal_value(self, data):
+        if not isinstance(data, Mapping):
+            message = self.error_messages['invalid'].format(
+                datatype=type(data).__name__
+            )
+            raise ValidationError({
+                api_settings.NON_FIELD_ERRORS_KEY: [message]
+            }, code='invalid')
+
+        fields = self._writable_fields
+
+        for field in fields:
+            # if pk in request, remove UniqueValidator.
+            if self.Meta.model._meta.pk.name in [
+                f.field_name for f in self.fields.fields.values()
+            ] or "pk" in [
+                f.field_name for f in self.fields.fields.values()
+            ]:
+                field.validators = [
+                    validator for validator in field.validators if not isinstance(validator, UniqueValidator)
+                ]
+        return super(NestedGetOrCreateMixin, self).to_internal_value(data)
 
 
 class NestedUpdateMixin(BaseNestedModelSerializer):
